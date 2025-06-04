@@ -98,7 +98,7 @@ tls_io = tls.init(HOST_NAME, SOCKET_FD, PORT, CERT_FILE)
 
 # start the handshake operation, the method returns 0 on success and returns negative number on error.
 
-tls_io.start_handshake()
+tls_io.handshake()
 
 # Send data to the server, the method returns int value  ( negative means error) , 0 or greater means the number of written bytes
 
