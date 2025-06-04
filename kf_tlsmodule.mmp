@@ -1,0 +1,27 @@
+targettype dll
+TARGET	       kf_tls.pyd
+
+MACRO __SYMBIAN32__
+
+SYSTEMINCLUDE \epoc32\include
+SYSTEMINCLUDE \epoc32\include\stdapis
+SYSTEMINCLUDE \epoc32\include\python25
+USERINCLUDE \epoc32\include\psa
+USERINCLUDE \epoc32\include\mbedtls
+
+USERINCLUDE   .
+
+LIBRARY euser.lib
+LIBRARY libc.lib
+LIBRARY python25.lib
+STATICLIBRARY mbedtls_stl.lib
+// LIBRARY mbedtls341_stl.lib
+
+source tlsmodule.cpp
+
+// high caps
+// CAPABILITY ReadDeviceData WriteDeviceData SwEvent NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment
+
+// self-signed caps
+CAPABILITY NetworkServices LocalServices ReadUserData WriteUserData UserEnvironment
+
