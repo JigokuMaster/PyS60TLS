@@ -1,6 +1,6 @@
 TLS extension for  PyS60.
 
-The extension uses [MbedTLS](https://github.com/JigokuMaster/Symbian-TLS-Patch) compiled with TLS2.0 support.
+The extension uses [MbedTLS](https://github.com/JigokuMaster/Symbian-TLS-Patch) compiled with TLS1.2 support.
 
 ### Installation Files
 
