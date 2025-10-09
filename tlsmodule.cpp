@@ -25,8 +25,8 @@
 #define DEBUG_LEVEL 5
 
 static void tls_debug(void *ctx, int level,
-                     const char *file, int line,
-                     const char *str)
+	const char *file, int line,
+	const char *str)
 {
     ((void) level);
 
@@ -35,6 +35,7 @@ static void tls_debug(void *ctx, int level,
 }
 #endif
 
+#if 0
 int tls_send(void *ctx, const unsigned char *buf, size_t len)
 {
     int sock_fd = *((int*)ctx);
@@ -47,18 +48,18 @@ int tls_send(void *ctx, const unsigned char *buf, size_t len)
 
     if (ret < 0)
     {
-        /*if (net_would_block(ctx) != 0) {
-            return MBEDTLS_ERR_SSL_WANT_WRITE;
-        }*/
+	/*if (net_would_block(ctx) != 0) {
+	  return MBEDTLS_ERR_SSL_WANT_WRITE;
+	  }*/
 
 	if (errno == EPIPE) {
-            return MBEDTLS_ERR_NET_CONN_RESET;
-        }
+	    return MBEDTLS_ERR_NET_CONN_RESET;
+	}
 
-        if (errno == EINTR) {
-            return MBEDTLS_ERR_SSL_WANT_WRITE;
-        }
-        return MBEDTLS_ERR_NET_SEND_FAILED;
+	if (errno == EINTR) {
+	    return MBEDTLS_ERR_SSL_WANT_WRITE;
+	}
+	return MBEDTLS_ERR_NET_SEND_FAILED;
     }
 
     return ret;
@@ -79,46 +80,126 @@ int tls_recv(void *ctx, unsigned char *buf, size_t len)
     {
 
 	if (errno == EPIPE) {
-            return MBEDTLS_ERR_NET_CONN_RESET;
-        }
+	    return MBEDTLS_ERR_NET_CONN_RESET;
+	}
 
-        if (errno == EINTR) {
-            return MBEDTLS_ERR_SSL_WANT_READ;
-        }
+	if (errno == EINTR) {
+	    return MBEDTLS_ERR_SSL_WANT_READ;
+	}
 
-        return MBEDTLS_ERR_NET_RECV_FAILED;
+	return MBEDTLS_ERR_NET_RECV_FAILED;
     }
 
     return ret;
 
 }
+#endif
 
+class CTLS 
+{
 
-
-struct TLS_object {
-  PyObject_VAR_HEAD
-  mbedtls_ssl_context* ctx;
-  mbedtls_ctr_drbg_context* ctr_drbg;
-  mbedtls_ssl_config* conf;
-  mbedtls_entropy_context* entropy;
-  int socket_fd;
-  int error_code;
+    public:
+	CTLS();
+	~CTLS();
+	bool Init(char* hostname, int fd, uint32_t timeout);
+	char* getError();
+	int DoHandshake();
+	int Read(unsigned char* buf, int len);
+	int Write(unsigned char* data, int len);
+	int Close();
+    private:
+	mbedtls_ssl_context ssl;
+	mbedtls_ctr_drbg_context ctr_drbg;
+	mbedtls_ssl_config conf;
+	mbedtls_entropy_context entropy;
+	mbedtls_net_context net;
+	int error_code;
+	char error_buf[1024];
 #if defined(MBEDTLS_DEBUG_C)
-  FILE* log_fp;
+	FILE* log_fp;
 #endif
 };
 
-#ifdef __SYMBIAN32__
-#define TLS_type ((PyTypeObject*)SPyGetGlobalString("TLSType"))
-#endif
 
-extern "C" PyObject* tls_handshake_start(TLS_object* tlsobj, PyObject* args)
+CTLS::CTLS()
 {
+    mbedtls_ssl_init(&ssl);
+    mbedtls_ssl_config_init(&conf);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    mbedtls_entropy_init(&entropy);
+    mbedtls_net_init(&net);
+    error_code = 0;
+    memset(error_buf, 0, sizeof(error_buf));
+
+}
+
+CTLS::~CTLS()
+{
+    mbedtls_ssl_free(&ssl);
+    mbedtls_ssl_config_free(&conf);
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
+    mbedtls_net_free(&net);
+}
+
+bool CTLS::Init(char* hostname, int fd, uint32_t timeout)
+{
+#if defined(MBEDTLS_DEBUG_C)
+    //mbedtls_ssl_conf_dbg(conf, tls_debug, obj->log_fp);	
+#endif 
+    error_code = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
+    if(error_code != 0)
+    {
+	sprintf(error_buf, "mbedtls_ctr_drbg_seed() error: %d", error_code);
+	return false;
+    }
+	
+    
+    error_code = mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+
+    if(error_code != 0)
+    {
+	sprintf(error_buf, "mbedtls_ssl_config_defaults() error: %d", error_code);
+	return false;
+    }
+ 
+
+    //mbedtls_ssl_conf_authmode(conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+    mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
+    // mbedtls_ssl_conf_ca_chain(&conf, &cacert, NULL);
+    mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
+
+    error_code = mbedtls_ssl_setup(&ssl, &conf);
+    if(error_code != 0)
+    {
+	sprintf(error_buf, "mbedtls_ssl_setup() error: %d", error_code);
+	return false;
+    }
 
 
+    error_code = mbedtls_ssl_set_hostname(&ssl, hostname);
+
+    if(error_code != 0)
+    {
+	sprintf(error_buf, "mbedtls_ssl_set_hostname() error: %d", error_code);
+	return false;
+    }
+
+    net.fd = fd;
+    mbedtls_ssl_conf_read_timeout(&conf, timeout);
+    mbedtls_ssl_set_bio(&ssl, &net, mbedtls_net_send, mbedtls_net_recv, mbedtls_net_recv_timeout);
+    return true;
+}
+
+char* CTLS::getError()
+{
+    return (char*)error_buf;
+}
+
+int CTLS::DoHandshake()
+{
     int ret = -1;
-    Py_BEGIN_ALLOW_THREADS
-    while ((ret = mbedtls_ssl_handshake(tlsobj->ctx)) != 0)
+    while ((ret = mbedtls_ssl_handshake(&ssl)) != 0)
     {
         if((ret != MBEDTLS_ERR_SSL_WANT_READ) && (ret != MBEDTLS_ERR_SSL_WANT_WRITE) )
 	{
@@ -126,40 +207,17 @@ extern "C" PyObject* tls_handshake_start(TLS_object* tlsobj, PyObject* args)
 	    break;
         }
     }
+    return ret;
 
-    Py_END_ALLOW_THREADS
-    tlsobj->error_code = ret;
-    return Py_BuildValue("i", ret);
 }
 
-extern "C" PyObject* tls_read(TLS_object* tlsobj, PyObject* args)
+int CTLS::Read(unsigned char* buf, int len)
 {
 
     int ret = 0;
-    const int min_read = 1024;
-    int len = min_read;
-    PyObject* buf;
-    if (!PyArg_ParseTuple(args, "|i", &len))
-    {
-        return NULL;
-    }
-
-    if(len <= 0)
-    {
-		len = min_read;
-    }
-
-    if(!(buf = PyString_FromStringAndSize((char*)0, len)) )
-    {
-		return NULL;
-    }
-
-
-    Py_BEGIN_ALLOW_THREADS
-
     while(1)
     {
-	int r = mbedtls_ssl_read(tlsobj->ctx, (unsigned char*)PyString_AsString(buf), len);
+	int r = mbedtls_ssl_read(&ssl, buf, len);
 
         if ( (r == MBEDTLS_ERR_SSL_WANT_READ) || (r == MBEDTLS_ERR_SSL_WANT_WRITE) )
 	{
@@ -173,7 +231,77 @@ extern "C" PyObject* tls_read(TLS_object* tlsobj, PyObject* args)
 	ret = r;	
 	break;
     }
+    return ret;
+}
 
+int CTLS::Write(unsigned char* data, int len)
+{
+
+    int ret = 0;
+    while((ret = mbedtls_ssl_write(&ssl, data, len)) <= 0)
+    {
+
+        if ( (ret != MBEDTLS_ERR_SSL_WANT_READ) && (ret != MBEDTLS_ERR_SSL_WANT_WRITE) )
+	{
+            break;
+        }
+    }
+    return ret;
+}
+
+int CTLS::Close()
+{
+    return mbedtls_ssl_close_notify(&ssl);
+}
+
+struct TLS_object 
+{
+    PyObject_VAR_HEAD
+    CTLS* tls;
+    int error_code;
+};
+
+#ifdef __SYMBIAN32__
+#define TLS_type ((PyTypeObject*)SPyGetGlobalString("TLSType"))
+#endif
+
+extern "C" PyObject* tls_handshake_start(TLS_object* obj, PyObject* args)
+{
+
+
+    int ret = 0;
+    Py_BEGIN_ALLOW_THREADS
+    ret = obj->tls->DoHandshake();
+    Py_END_ALLOW_THREADS
+    obj->error_code = ret;
+    return Py_BuildValue("i", ret);
+}
+
+extern "C" PyObject* tls_read(TLS_object* obj, PyObject* args)
+{
+
+    int ret = 0;
+    const int min_read = 1024;
+    int len = min_read;
+    PyObject* buf;
+    if (!PyArg_ParseTuple(args, "|i", &len))
+    {
+        return NULL;
+    }
+
+    if(len <= 0)
+    {
+	len = min_read;
+    }
+
+    if(!(buf = PyString_FromStringAndSize((char*)0, len)) )
+    {
+	return NULL;
+    }
+
+
+    Py_BEGIN_ALLOW_THREADS
+    ret = obj->tls->Read((unsigned char*)PyString_AsString(buf), len);
     Py_END_ALLOW_THREADS
     if(ret >= 0)
     {
@@ -184,12 +312,12 @@ extern "C" PyObject* tls_read(TLS_object* tlsobj, PyObject* args)
 	}
     }
 
-    tlsobj->error_code = (ret < 0) ? ret : 0;
+    obj->error_code = (ret < 0) ? ret : 0;
     return buf;
 }
 
 
-extern "C" PyObject* tls_write(TLS_object* tlsobj, PyObject* args)
+extern "C" PyObject* tls_write(TLS_object* obj, PyObject* args)
 {
 
 
@@ -200,43 +328,26 @@ extern "C" PyObject* tls_write(TLS_object* tlsobj, PyObject* args)
         return NULL;
     }
 
-
     Py_BEGIN_ALLOW_THREADS
-    while((ret = mbedtls_ssl_write(tlsobj->ctx, data, len)) <= 0)
-    {
-
-        if ( (ret != MBEDTLS_ERR_SSL_WANT_READ) && (ret != MBEDTLS_ERR_SSL_WANT_WRITE) )
-	{
-            break;
-        }
-    }
+    ret = obj->tls->Write(data, len);
     Py_END_ALLOW_THREADS
-
-    tlsobj->error_code = ret;
-
+    obj->error_code = ret;
     return Py_BuildValue("i", ret);
-
 }
 
 
 
-extern "C" PyObject* tls_close(TLS_object* tlsobj, PyObject* args)
+extern "C" PyObject* tls_close(TLS_object* obj, PyObject* args)
 {
-    /*if(tlsobj->socket_fd > 0)  
-    {
-	close(tlsobj->socket_fd);
-    }*/
 
-    int ret = mbedtls_ssl_close_notify(tlsobj->ctx);
-    tlsobj->error_code = ret;
+    int ret = obj->tls->Close();
+    obj->error_code = ret;
     return Py_BuildValue("i", ret);
-
 }
 
-extern "C" PyObject* tls_geterror(TLS_object* tlsobj, PyObject* args)
+extern "C" PyObject* tls_geterror(TLS_object* obj, PyObject* args)
 {
-
-    return Py_BuildValue("i", tlsobj->error_code);
+    return Py_BuildValue("i",obj->error_code);
 }
 
 
@@ -256,34 +367,11 @@ const static PyMethodDef tls_object_methods[] =
 
 static void tls_dealloc(TLS_object *obj)
 {
-    if(obj->ctx != NULL)
-	{
-		mbedtls_ssl_free(obj->ctx);
-		obj->ctx = NULL;
-	}
-	if(obj->conf != NULL)
+    if(obj->tls != NULL)
     {
-		mbedtls_ssl_config_free(obj->conf);
-		obj->conf = NULL;
-	}	
-    if(obj->ctr_drbg != NULL)
-	{
-		mbedtls_ctr_drbg_free(obj->ctr_drbg);
-		obj->ctr_drbg = NULL;
-	}
-	if(obj->entropy != NULL)
-    {
-		mbedtls_entropy_free(obj->entropy);
-		obj->entropy = NULL;
-	}	
-
-#if defined(MBEDTLS_DEBUG_C)
-	if(obj->log_fp != NULL)
-    {
-		fclose(obj->log_fp);
-		obj->log_fp = NULL;
-	}
-#endif	
+	delete obj->tls;
+	obj->tls = NULL;
+    }
     PyObject_Del(obj);
 }
 
@@ -329,13 +417,13 @@ extern "C" PyObject* tls_init(PyObject* /*self*/, PyObject* args)
 
     char* server_name;
     int socket_fd;
+    uint32_t timeout = 0;
     char* cert_file = NULL;
-	if (!PyArg_ParseTuple(args, "si|s",&server_name, &socket_fd, &cert_file))
+    if (!PyArg_ParseTuple(args, "si|is",&server_name, &socket_fd, &timeout, &cert_file))
     {
-		return NULL;
+	return NULL;
     }
     TLS_object *obj;
- 
 
 #ifdef __SYMBIAN32__ 
     if (!(obj = PyObject_New(TLS_object, TLS_type)))
@@ -349,88 +437,16 @@ extern "C" PyObject* tls_init(PyObject* /*self*/, PyObject* args)
     }
 #endif
 
-	obj->ctx = NULL;
-	obj->ctr_drbg = NULL;
-	obj->conf = NULL;
-	obj->entropy = NULL;
-#if defined(MBEDTLS_DEBUG_C)
-	obj->log_fp = fopen("C:\\mbedtls.log", "w");
-    mbedtls_debug_set_threshold(DEBUG_LEVEL);
-#endif
-	
-    if( (obj->ctx = (mbedtls_ssl_context*)malloc(sizeof(mbedtls_ssl_context))) == NULL)
+    obj->error_code = 0;
+    if (!(obj->tls = new CTLS()) )
     {
-		return PyErr_NoMemory();
+	return PyErr_NoMemory();
     }
 
-
-    if( (obj->ctr_drbg = (mbedtls_ctr_drbg_context*)malloc(sizeof(mbedtls_ctr_drbg_context))) == NULL)
+    if(!obj->tls->Init(server_name, socket_fd, timeout))
     {
-		return PyErr_NoMemory();
+	return PyErr_Format(PyExc_SystemError, obj->tls->getError());
     }
-
-    if( (obj->conf = (mbedtls_ssl_config*)malloc(sizeof(mbedtls_ssl_config))) == NULL)
-    {
-		return PyErr_NoMemory();
-    }
-
-
-    if( (obj->entropy = (mbedtls_entropy_context*)malloc(sizeof(mbedtls_entropy_context))) == NULL)
-    {
-		return PyErr_NoMemory();
-    }
-
-
-    mbedtls_ssl_init(obj->ctx);
-    mbedtls_ctr_drbg_init(obj->ctr_drbg);
-    mbedtls_ssl_config_init(obj->conf);
-    mbedtls_entropy_init(obj->entropy);
-#if defined(MBEDTLS_DEBUG_C)
-	if(obj->log_fp != NULL)
-    {
-		mbedtls_ssl_conf_dbg(obj->conf, tls_debug, obj->log_fp);
-	}	
-#endif
-
-    obj->error_code = mbedtls_ctr_drbg_seed(obj->ctr_drbg, mbedtls_entropy_func, obj->entropy, NULL, 0);
-    if(obj->error_code != 0)
-    {
-		return PyErr_Format(PyExc_SystemError, "mbedtls_ctr_drbg_seed() %d", obj->error_code);
-    }
-	
-	obj->error_code = mbedtls_ssl_config_defaults(obj->conf,
-										MBEDTLS_SSL_IS_CLIENT,
-                                        MBEDTLS_SSL_TRANSPORT_STREAM,
-                                        MBEDTLS_SSL_PRESET_DEFAULT);
-
-    if(obj->error_code != 0)
-    {
-		return PyErr_Format(PyExc_SystemError, "mbedtls_ssl_config_defaults() %d", obj->error_code);
-    }
- 
-
-    //mbedtls_ssl_conf_authmode(obj->conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
-    mbedtls_ssl_conf_authmode(obj->conf, MBEDTLS_SSL_VERIFY_NONE);
-    // mbedtls_ssl_conf_ca_chain(&conf, &cacert, NULL);
-    mbedtls_ssl_conf_rng(obj->conf, mbedtls_ctr_drbg_random, obj->ctr_drbg);
-
-    obj->error_code = mbedtls_ssl_setup(obj->ctx, obj->conf);
-    if(obj->error_code != 0)
-    {
-		return PyErr_Format(PyExc_SystemError, "mbedtls_ssl_setup() %d", obj->error_code);
-    }
-
-
-	obj->error_code = mbedtls_ssl_set_hostname(obj->ctx, server_name);
-    if(obj->error_code != 0)
-    {
-		return PyErr_Format(PyExc_SystemError, "mbedtls_ssl_set_hostname() %d", obj->error_code);
-    }
-
-	//mbedtls_ssl_set_bio(obj->ctx, &socket_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
-
-	obj->socket_fd = socket_fd;
-	mbedtls_ssl_set_bio(obj->ctx, &(obj->socket_fd), tls_send, tls_recv, NULL);
     return (PyObject*)obj;
 }
 
@@ -500,8 +516,9 @@ extern "C"
 	#ifdef __SYMBIAN32__
 	DEFTYPE("TLSType",c_tls_type);
 	#endif 
-	Py_InitModule("tls", (PyMethodDef*)tls_methods);
-	}
+	PyObject* m = Py_InitModule("tls", (PyMethodDef*)tls_methods);
+	PyModule_AddIntConstant(m,"MBEDTLS_ERR_SSL_TIMEOUT", MBEDTLS_ERR_SSL_TIMEOUT);
+    }
 
     // second exported function
     DL_EXPORT(void) ixfinitls(void*)
