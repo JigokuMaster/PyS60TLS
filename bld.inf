@@ -2,5 +2,5 @@ PRJ_PLATFORMS
 GCCE WINSCW
 
 PRJ_MMPFILES 
-tlsmodule.mmp
+//tlsmodule.mmp
 kf_tlsmodule.mmp 

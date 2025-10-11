@@ -16,7 +16,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
-
+#include <fcntl.h>
 
 #if defined(MBEDTLS_DEBUG_C)
 #include "mbedtls/debug.h"
@@ -35,73 +35,30 @@ static void tls_debug(void *ctx, int level,
 }
 #endif
 
-#if 0
-int tls_send(void *ctx, const unsigned char *buf, size_t len)
+int block_fd(int fd, bool block)
 {
-    int sock_fd = *((int*)ctx);
-
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
-
-
-    ret = (int) send(sock_fd,(const char*)buf, len, 0);
-    // printf("tcp_send(sock_fd=%d)=%d\n", sock_fd, ret);
-
-    if (ret < 0)
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1)
     {
-	/*if (net_would_block(ctx) != 0) {
-	  return MBEDTLS_ERR_SSL_WANT_WRITE;
-	  }*/
-
-	if (errno == EPIPE) {
-	    return MBEDTLS_ERR_NET_CONN_RESET;
-	}
-
-	if (errno == EINTR) {
-	    return MBEDTLS_ERR_SSL_WANT_WRITE;
-	}
-	return MBEDTLS_ERR_NET_SEND_FAILED;
+	return -1;
     }
-
-    return ret;
-}
-
-
-int tls_recv(void *ctx, unsigned char *buf, size_t len)
-{
-
-    int sock_fd = *((int*)ctx);
-    // printf("tcp_recv(sock_fd=%d)=%d\n", sock_fd, len);
-
-    int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
-
-    ret = (int) recv(sock_fd, (char*)buf, len, 0);
-
-    if (ret < 0)
+    if(block)
     {
-
-	if (errno == EPIPE) {
-	    return MBEDTLS_ERR_NET_CONN_RESET;
-	}
-
-	if (errno == EINTR) {
-	    return MBEDTLS_ERR_SSL_WANT_READ;
-	}
-
-	return MBEDTLS_ERR_NET_RECV_FAILED;
+	flags |= O_NONBLOCK; 
     }
-
-    return ret;
-
-}
-#endif
-
+    else
+    {
+	flags &= (~O_NONBLOCK); 
+    }
+    return  fcntl(fd, F_SETFL, flags);
+}    
 class CTLS 
 {
 
     public:
 	CTLS();
 	~CTLS();
-	bool Init(char* hostname, int fd, uint32_t timeout);
+	bool Init(char* hostname, int fd, uint32_t timeout, char* cert_file);
 	char* getError();
 	int DoHandshake();
 	int Read(unsigned char* buf, int len);
@@ -113,6 +70,7 @@ class CTLS
 	mbedtls_ssl_config conf;
 	mbedtls_entropy_context entropy;
 	mbedtls_net_context net;
+	mbedtls_x509_crt cacert;
 	int error_code;
 	char error_buf[1024];
 #if defined(MBEDTLS_DEBUG_C)
@@ -125,12 +83,12 @@ CTLS::CTLS()
 {
     mbedtls_ssl_init(&ssl);
     mbedtls_ssl_config_init(&conf);
+    mbedtls_x509_crt_init(&cacert);
     mbedtls_ctr_drbg_init(&ctr_drbg);
     mbedtls_entropy_init(&entropy);
     mbedtls_net_init(&net);
     error_code = 0;
     memset(error_buf, 0, sizeof(error_buf));
-
 }
 
 CTLS::~CTLS()
@@ -140,21 +98,31 @@ CTLS::~CTLS()
     mbedtls_ctr_drbg_free(&ctr_drbg);
     mbedtls_entropy_free(&entropy);
     mbedtls_net_free(&net);
+    mbedtls_x509_crt_free(&cacert);
 }
 
-bool CTLS::Init(char* hostname, int fd, uint32_t timeout)
+bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
 {
-#if defined(MBEDTLS_DEBUG_C)
-    //mbedtls_ssl_conf_dbg(conf, tls_debug, obj->log_fp);	
-#endif 
+    bool ssl_verify = false;
     error_code = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
+
     if(error_code != 0)
     {
 	sprintf(error_buf, "mbedtls_ctr_drbg_seed() error: %d", error_code);
 	return false;
     }
-	
     
+    if(cert_file != NULL)
+    {
+	error_code = mbedtls_x509_crt_parse_file(&cacert, cert_file);
+	if(error_code != 0)
+	{
+	    sprintf(error_buf, "mbedtls_x509_crt_parse_file() error: %d", error_code);
+	    return false;
+	}
+	ssl_verify = true;
+    }
+
     error_code = mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
 
     if(error_code != 0)
@@ -162,13 +130,23 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout)
 	sprintf(error_buf, "mbedtls_ssl_config_defaults() error: %d", error_code);
 	return false;
     }
- 
 
-    //mbedtls_ssl_conf_authmode(conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
-    mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
-    // mbedtls_ssl_conf_ca_chain(&conf, &cacert, NULL);
+    
+#if defined(MBEDTLS_DEBUG_C)
+    mbedtls_ssl_conf_dbg(&conf, tls_debug, log_fp);	
+#endif
+    
+    if(ssl_verify)
+    {
+	mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_REQUIRED);
+	mbedtls_ssl_conf_ca_chain(&conf, &cacert, NULL);
+    }	
+    else
+    {
+	mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_NONE);
+    }
+
     mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
-
     error_code = mbedtls_ssl_setup(&ssl, &conf);
     if(error_code != 0)
     {
@@ -176,9 +154,7 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout)
 	return false;
     }
 
-
     error_code = mbedtls_ssl_set_hostname(&ssl, hostname);
-
     if(error_code != 0)
     {
 	sprintf(error_buf, "mbedtls_ssl_set_hostname() error: %d", error_code);
@@ -208,7 +184,6 @@ int CTLS::DoHandshake()
         }
     }
     return ret;
-
 }
 
 int CTLS::Read(unsigned char* buf, int len)
@@ -350,8 +325,6 @@ extern "C" PyObject* tls_geterror(TLS_object* obj, PyObject* args)
     return Py_BuildValue("i",obj->error_code);
 }
 
-
-
 const static PyMethodDef tls_object_methods[] = 
 {
     {"handshake", (PyCFunction)tls_handshake_start, METH_VARARGS},
@@ -362,8 +335,6 @@ const static PyMethodDef tls_object_methods[] =
     {NULL, NULL}           // sentinel
 
 };
-
-
 
 static void tls_dealloc(TLS_object *obj)
 {
@@ -443,7 +414,7 @@ extern "C" PyObject* tls_init(PyObject* /*self*/, PyObject* args)
 	return PyErr_NoMemory();
     }
 
-    if(!obj->tls->Init(server_name, socket_fd, timeout))
+    if(!obj->tls->Init(server_name, socket_fd, timeout, cert_file))
     {
 	return PyErr_Format(PyExc_SystemError, obj->tls->getError());
     }
@@ -457,35 +428,107 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
 
     char* server_name;
     int server_port;
-    if (!PyArg_ParseTuple(args, "si",&server_name, &server_port))
+    uint32_t timeout = 0;
+    if (!PyArg_ParseTuple(args, "si|i",&server_name, &server_port, &timeout))
     {
 	return NULL;
     }
     
     int socket_fd = -1;
+    int fd_flags;
+    int error = 0;
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(server_port);
     if(inet_aton(server_name, &addr.sin_addr) < 1)
     {
-		PyErr_SetString(PyExc_SystemError, "invalid IP address");
-		return NULL;
+	PyErr_SetString(PyExc_SystemError, "invalid IP address");
+	return NULL;
     }
 
 
-    if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) > 0)
+    Py_BEGIN_ALLOW_THREADS
+    socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    Py_END_ALLOW_THREADS
+    if (socket_fd == -1)
     {
-	if(connect(socket_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+	return PyErr_Format(PyExc_OSError, "failed to create socket, %s", strerror(errno));
+    }
+
+    if(timeout > 0)
+    {
+	Py_BEGIN_ALLOW_THREADS
+	error = block_fd(socket_fd, false);
+	Py_END_ALLOW_THREADS
+	if(error ==  -1)
 	{
+	    error = errno;
+	    close(socket_fd);
+	    return PyErr_Format(PyExc_OSError, "failed to setup non blocking socket, %s", strerror(error));
+	}	    
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    error = connect(socket_fd, (struct sockaddr *)&addr, sizeof(addr));
+    Py_END_ALLOW_THREADS
+    if(error < 0 && errno != EINPROGRESS)
+    {
+	error = errno;
+	close(socket_fd);
+	return PyErr_Format(PyExc_OSError, "failed to connect to %s:%d, %s", server_name, server_port, strerror(error));
+    }
+
+    if(timeout > 0)
+    {
+	fd_set write_fds, except_fds;
+	struct timeval tv;
+	FD_ZERO(&write_fds);
+	FD_SET(socket_fd, &write_fds);
+	FD_ZERO(&except_fds);
+	FD_SET(socket_fd, &except_fds);
+	tv.tv_sec = timeout;
+	tv.tv_usec = 0;
+
+	Py_BEGIN_ALLOW_THREADS
+	error = select(socket_fd + 1, NULL, &write_fds, &except_fds, &tv);
+	Py_END_ALLOW_THREADS
+	if (error == -1)
+	{
+	    error = errno;
+	    close(socket_fd);
+	    return PyErr_Format(PyExc_OSError, "select() failed, %s", strerror(error));
+	}
+	else if (error == 0)
+	{
+	    error = errno;
+	    close(socket_fd);
+	    return PyErr_Format(PyExc_OSError, "connection failed, %s", strerror(error));
+	}
+	else
+	{
+	    socklen_t error_len = sizeof(error);
+	    getsockopt(socket_fd, SOL_SOCKET, SO_ERROR, &error, &error_len);
+	    if(error < 0)
+	    {
+		error = errno;
 		close(socket_fd);
-		return PyErr_SetFromErrno(PyExc_IOError);
+		return PyErr_Format(PyExc_OSError, "connection timed out, %s", strerror(error));	
+	    }		
 	}
     }
 
+    Py_BEGIN_ALLOW_THREADS
+    error = block_fd(socket_fd, true);
+    Py_END_ALLOW_THREADS
+    if(error ==  -1)
+    {
+	error = errno;
+	close(socket_fd);
+	return PyErr_Format(PyExc_OSError, "failed to setup blocking socket, %s", strerror(error));
 
+    }	
     return Py_BuildValue("i", socket_fd);
-
 }
 
 const static PyMethodDef tls_methods[] = 
@@ -509,28 +552,24 @@ extern "C"
   } while (0)
   
 
-    // first exported function
+    // 1st exported function
     DL_EXPORT(void) inittls(void)
     {
 
-	#ifdef __SYMBIAN32__
+#ifdef __SYMBIAN32__
 	DEFTYPE("TLSType",c_tls_type);
-	#endif 
+#endif 
 	PyObject* m = Py_InitModule("tls", (PyMethodDef*)tls_methods);
 	PyModule_AddIntConstant(m,"MBEDTLS_ERR_SSL_TIMEOUT", MBEDTLS_ERR_SSL_TIMEOUT);
     }
 
-    // second exported function
+    // 2nd exported function
     DL_EXPORT(void) ixfinitls(void*)
     {
-		/*
-		*
-		* this function will be called by SPy_dynload_finalize()
-		*
-		* if we don't export it here,a wrong function exported by mbetls will be called instead !!!
-		*
-		*/
-	}
+	/*** this function will be called by SPy_dynload_finalize()
+	** if we don't export it here,a wrong function exported by mbetls will be called instead!!!
+	**/
+    }
 
 }
 

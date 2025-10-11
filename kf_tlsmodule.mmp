@@ -14,7 +14,8 @@ USERINCLUDE   .
 LIBRARY euser.lib
 LIBRARY libc.lib
 LIBRARY python25.lib
-STATICLIBRARY mbedtls_stl.lib
+STATICLIBRARY mbedtls.lib
+//STATICLIBRARY mbedtls_stl.lib
 // LIBRARY mbedtls341_stl.lib
 
 source tlsmodule.cpp
