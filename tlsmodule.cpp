@@ -9,7 +9,11 @@
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
 #include <sys/types.h>
+#ifdef PATCHED_SOCKET_H
+#include "socket.h"
+#else
 #include <sys/socket.h>
+#endif
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -44,11 +48,11 @@ int block_fd(int fd, bool block)
     }
     if(block)
     {
-	flags |= O_NONBLOCK; 
+	flags &= (~O_NONBLOCK); 
     }
     else
     {
-	flags &= (~O_NONBLOCK); 
+	flags |= O_NONBLOCK; 
     }
     return  fcntl(fd, F_SETFL, flags);
 }    
@@ -435,7 +439,6 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
     }
     
     int socket_fd = -1;
-    int fd_flags;
     int error = 0;
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -465,7 +468,7 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
 	{
 	    error = errno;
 	    close(socket_fd);
-	    return PyErr_Format(PyExc_OSError, "failed to setup non blocking socket, %s", strerror(error));
+	    return PyErr_Format(PyExc_OSError, "failed to set socket to nonblocking mode, %s", strerror(error));
 	}	    
     }
 
@@ -503,7 +506,7 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
 	{
 	    error = errno;
 	    close(socket_fd);
-	    return PyErr_Format(PyExc_OSError, "connection failed, %s", strerror(error));
+	    return PyErr_Format(PyExc_OSError, "connection timed out, %s", strerror(error));	    
 	}
 	else
 	{
@@ -513,7 +516,7 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
 	    {
 		error = errno;
 		close(socket_fd);
-		return PyErr_Format(PyExc_OSError, "connection timed out, %s", strerror(error));	
+		return PyErr_Format(PyExc_OSError, "connection failed, %s", strerror(error));
 	    }		
 	}
     }
@@ -525,7 +528,7 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
     {
 	error = errno;
 	close(socket_fd);
-	return PyErr_Format(PyExc_OSError, "failed to setup blocking socket, %s", strerror(error));
+	return PyErr_Format(PyExc_OSError, "failed to set socket to blocking mode, %s", strerror(error));
 
     }	
     return Py_BuildValue("i", socket_fd);

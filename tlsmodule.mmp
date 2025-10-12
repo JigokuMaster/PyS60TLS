@@ -2,24 +2,25 @@ targettype dll
 TARGET	       tls.pyd
 
 MACRO __SYMBIAN32__
-MACRO ESTLIB
+//MACRO ESTLIB
+MACRO PATCHED_SOCKET_H
 
 SYSTEMINCLUDE \epoc32\include
-SYSTEMINCLUDE \epoc32\include\libc
+//SYSTEMINCLUDE \epoc32\include\libc
+SYSTEMINCLUDE \epoc32\include\stdapis
 SYSTEMINCLUDE \epoc32\include\python
 USERINCLUDE \epoc32\include\psa
 USERINCLUDE \epoc32\include\mbedtls
-SYSTEMINCLUDE \epoc32\include\estlib
-
-
+//SYSTEMINCLUDE \epoc32\include\estlib
 USERINCLUDE   .
 
 LIBRARY euser.lib
-LIBRARY estlib.lib
+//LIBRARY estlib.lib
+LIBRARY libc.lib
 LIBRARY python222.lib
-STATICLIBRARY mbedtls_stl.lib
+STATICLIBRARY mbedtls.lib
+//STATICLIBRARY mbedtls_stl.lib
 // LIBRARY mbedtls341_stl.lib
-
 
 source tlsmodule.cpp
 
