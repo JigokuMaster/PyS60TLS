@@ -9,8 +9,6 @@ SYSTEMINCLUDE \epoc32\include\python25
 USERINCLUDE \epoc32\include\psa
 USERINCLUDE \epoc32\include\mbedtls
 
-USERINCLUDE   .
-
 LIBRARY euser.lib
 LIBRARY libc.lib
 LIBRARY python25.lib
@@ -26,3 +24,4 @@ source tlsmodule.cpp
 // self-signed caps
 CAPABILITY NetworkServices LocalServices ReadUserData WriteUserData UserEnvironment
 
+DEFFILE ./eabi/kf_tls.def

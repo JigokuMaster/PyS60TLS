@@ -1,19 +1,11 @@
-#include <Python.h>
-#ifdef __SYMBIAN32__
-#include <symbian_python_ext_util.h>
-#endif
-
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/ssl.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
 #include <sys/types.h>
-#ifdef PATCHED_SOCKET_H
-#include "socket.h"
-#else
 #include <sys/socket.h>
-#endif
+#include <sys/select.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -21,6 +13,11 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
+
+#include <Python.h>
+#ifdef __SYMBIAN32__
+#include <symbian_python_ext_util.h>
+#endif
 
 #if defined(MBEDTLS_DEBUG_C)
 #include "mbedtls/debug.h"

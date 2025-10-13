@@ -1,3 +1,4 @@
 *.pyc
 *.pem
 *.o
+depoly.sh

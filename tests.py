@@ -5,7 +5,7 @@ sys.path.append('/tmp')
 import httpslib
 
 def test_get():
-    host = 'api.ipif.org'
+    host = 'api.ipify.org'
     conn = httpslib.HTTPSConnection(host)
     # tell the server to close the connection. Otherwise, read() will block forever.
     headers = {'Connection': 'close'}
@@ -42,6 +42,6 @@ def test_ssl_verification():
     conn.shutdown()
 
 
-# test_get()
+test_get()
 # test_timeout()
-test_ssl_verification()
+#test_ssl_verification()

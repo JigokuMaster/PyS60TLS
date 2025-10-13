@@ -3,7 +3,7 @@ MBEDTLS_PATH = $(shell realpath ~/Dev/C/mbedtls-3.4.1)
 PYTHON_PATH= $(shell realpath ~/Dev/C/Python-2.2.2)
 LINUX_EXT_PATH = /tmp/tls.so
 
-CXXFLAGS += -fPIC -w -I. -I$(PYTHON_PATH) \
+CXXFLAGS += -fPIC -w -I$(PYTHON_PATH) \
 	      -I$(PYTHON_PATH)/Include \
 	      -I$(MBEDTLS_PATH)/include \
 
