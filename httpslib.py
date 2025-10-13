@@ -284,7 +284,7 @@ class HTTPSConnection(HTTPConnection):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._settimeout(sock, self.timeout)
             sock.connect((self.host, self.port))
-            self.sock.setblocking(1)
+            sock.setblocking(1)
             sock_fd = sock.fileno()
 
         self.sock = TLSSocket(self.host, self.port, sock, sock_fd, self.timeout, self.cert_file)
