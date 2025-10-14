@@ -20,7 +20,7 @@ def test_get():
 
 def test_timeout():
     host = 'www.google.com'
-    conn = httpslib.HTTPSConnection(host, port=81, timeout=3)
+    conn = httpslib.HTTPSConnection(host, port=81, timeout=5)
     headers = {'Connection': 'close'}
     conn.request("GET", "/", headers=headers)
     resp = conn.getresponse()
@@ -42,6 +42,6 @@ def test_ssl_verification():
     conn.shutdown()
 
 
-test_get()
-# test_timeout()
+#test_get()
+test_timeout()
 #test_ssl_verification()

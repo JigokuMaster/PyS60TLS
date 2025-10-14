@@ -1,16 +1,16 @@
 from httplib import HTTPConnection, HTTPS_PORT
-import socket, os, struct, tls
+import socket, os, tls
 
 USE_TLS_CONNECT = False
-HAVE_SOCKET_TIMEOUT = hasattr(socket, 'settimeout') and hasattr(socket, 'timeout') 
+HAVE_SOCKET_TIMEOUT = hasattr(socket, 'setdefaulttimeout') and hasattr(socket, 'timeout') 
 try:
     import e32
     USE_TLS_CONNECT = e32.pys60_version_info[:3] == (1, 4, 5)
 except:
     USE_TLS_CONNECT = not HAVE_SOCKET_TIMEOUT
 
-
 # auto-generated from mbedtls headers.
+
 MBEDTLS_ERRORS_MAP = {
 	-0x7000: 'MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS',
 	-0x7080: 'MBEDTLS_ERR_SSL_FEATURE_UNAVAILABLE',
@@ -59,6 +59,36 @@ MBEDTLS_ERRORS_MAP = {
 	-0x6000: 'MBEDTLS_ERR_SSL_UNEXPECTED_CID',
 	-0x5F00: 'MBEDTLS_ERR_SSL_VERSION_MISMATCH',
 	-0x5E80: 'MBEDTLS_ERR_SSL_BAD_CONFIG',
+	10: 'MBEDTLS_SSL_ALERT_MSG_UNEXPECTED_MESSAGE',
+	20: 'MBEDTLS_SSL_ALERT_MSG_BAD_RECORD_MAC',
+	21: 'MBEDTLS_SSL_ALERT_MSG_DECRYPTION_FAILED',
+	22: 'MBEDTLS_SSL_ALERT_MSG_RECORD_OVERFLOW',
+	30: 'MBEDTLS_SSL_ALERT_MSG_DECOMPRESSION_FAILURE',
+	40: 'MBEDTLS_SSL_ALERT_MSG_HANDSHAKE_FAILURE',
+	41: 'MBEDTLS_SSL_ALERT_MSG_NO_CERT',
+	42: 'MBEDTLS_SSL_ALERT_MSG_BAD_CERT',
+	43: 'MBEDTLS_SSL_ALERT_MSG_UNSUPPORTED_CERT',
+	44: 'MBEDTLS_SSL_ALERT_MSG_CERT_REVOKED',
+	45: 'MBEDTLS_SSL_ALERT_MSG_CERT_EXPIRED',
+	46: 'MBEDTLS_SSL_ALERT_MSG_CERT_UNKNOWN',
+	47: 'MBEDTLS_SSL_ALERT_MSG_ILLEGAL_PARAMETER',
+	48: 'MBEDTLS_SSL_ALERT_MSG_UNKNOWN_CA',
+	49: 'MBEDTLS_SSL_ALERT_MSG_ACCESS_DENIED',
+	50: 'MBEDTLS_SSL_ALERT_MSG_DECODE_ERROR',
+	51: 'MBEDTLS_SSL_ALERT_MSG_DECRYPT_ERROR',
+	60: 'MBEDTLS_SSL_ALERT_MSG_EXPORT_RESTRICTION',
+	70: 'MBEDTLS_SSL_ALERT_MSG_PROTOCOL_VERSION',
+	71: 'MBEDTLS_SSL_ALERT_MSG_INSUFFICIENT_SECURITY',
+	80: 'MBEDTLS_SSL_ALERT_MSG_INTERNAL_ERROR',
+	86: 'MBEDTLS_SSL_ALERT_MSG_INAPROPRIATE_FALLBACK',
+	90: 'MBEDTLS_SSL_ALERT_MSG_USER_CANCELED',
+	100: 'MBEDTLS_SSL_ALERT_MSG_NO_RENEGOTIATION',
+	109: 'MBEDTLS_SSL_ALERT_MSG_MISSING_EXTENSION',
+	110: 'MBEDTLS_SSL_ALERT_MSG_UNSUPPORTED_EXT',
+	112: 'MBEDTLS_SSL_ALERT_MSG_UNRECOGNIZED_NAME',
+	115: 'MBEDTLS_SSL_ALERT_MSG_UNKNOWN_PSK_IDENTITY',
+	116: 'MBEDTLS_SSL_ALERT_MSG_CERT_REQUIRED',
+	120: 'MBEDTLS_SSL_ALERT_MSG_NO_APPLICATION_PROTOCOL',
 	-0x2080: 'MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE',
 	-0x2100: 'MBEDTLS_ERR_X509_UNKNOWN_OID',
 	-0x2180: 'MBEDTLS_ERR_X509_INVALID_FORMAT',
@@ -101,55 +131,45 @@ MBEDTLS_ERRORS_MAP = {
 	0x080000: 'MBEDTLS_X509_BADCRL_BAD_KEY'
 }
 
-class TLSError(Exception):
-    pass
-
-class TLSReadError(Exception):
-    pass
-
-class TLSWriteError(Exception):
-    pass
 
 class TLSWrapper:
-    def __init__(self, addr, socket_fd, timeout=0, certfile=None):
+    def __init__(self, addr, socket_fd, timeout=None, certfile=None):
         self.timeout = timeout
         self.cert_file = certfile
         self.init_tls(addr, socket_fd)
 
-    def _throwException(self, exception, msg, err_code):
-        if self.timeout > 0 and err_code == tls.MBEDTLS_ERR_SSL_TIMEOUT:
+    def _throwException(self, msg, err_code):
+        if self.timeout and (err_code == tls.MBEDTLS_ERR_SSL_TIMEOUT):
             msg = "Connection timed out"
             if HAVE_SOCKET_TIMEOUT:
                 raise socket.timeout(msg)
             else:
-                raise exception(msg)
+                raise tls.TLSError(msg)
 
         if err_code in MBEDTLS_ERRORS_MAP:
             msg += ' ' + MBEDTLS_ERRORS_MAP[err_code]
+
+        elif abs(err_code) in MBEDTLS_ERRORS_MAP:
+            msg += ' ' + MBEDTLS_ERRORS_MAP[abs(err_code)]
         else:
             msg += ' error ' + str(err_code)
-        raise exception(msg)
+        raise tls.TLSError(msg)
 
     def close(self):
         self.tls_obj.close()
 
     def init_tls(self, addr, socket_fd):
-        if self.cert_file is None:
-            self.tls_obj = tls.init(addr, socket_fd, self.timeout*1000)
-
-        else:
-            self.tls_obj = tls.init(addr, socket_fd, self.timeout*1000, self.cert_file)
-
+        self.tls_obj = tls.init(addr, socket_fd, self.timeout, self.cert_file)
         err = self.tls_obj.handshake()
         if err != 0:
             self.close()
-            self._throwException(TLSError, "tls.handshake()", err)
+            self._throwException("tls.handshake()", err)
 
     def write(self, data):
         r = self.tls_obj.write(data)
         if r <= 0:
             self.close()
-            self._throwException(TLSWriteError, "tls.write()", r)
+            self._throwException("tls.write()", r)
         return r 
     
     def readAll(self):
@@ -159,7 +179,7 @@ class TLSWrapper:
             r = self.tls_obj.getError()
             if r < 0:
                 self.close()
-                self._throwException(TLSReadError, "tls.read()", r)
+                self._throwException("tls.read()", r)
             if r == 0: #EOF
                 break
         return ''.join(data)
@@ -173,14 +193,15 @@ class TLSWrapper:
             r = self.tls_obj.getError()
             if r < 0:
                 self.close()
-                self._throwException(TLSReadError, "tls.read()", r)
+                self._throwException("tls.read()", r)
             else:
                 return data
 
     def getError(self):
         return self.tls_obj.getError()
 
-
+    def settimeout(self, timeout=0):
+        self.timeout = timeout
 
 class TLSFile:
 
@@ -222,10 +243,11 @@ class TLSFile:
             return line
 
 class TLSSocket:
-    def __init__(self, host, port, sock, sock_fd, timeout=0, certfile=None):
+    def __init__(self, host, port, sock, sock_fd, timeout=None, certfile=None):
         self.io_closed = False
         self.sock = sock
         self.sock_fd = sock_fd
+        self.timeout = timeout
         self._tls = TLSWrapper(host, sock_fd, timeout, certfile)
 
 
@@ -259,19 +281,27 @@ class TLSSocket:
     def recv(self, rlen = 1024, flags = 0):
         return self._tls.read(rlen)
 
+    def settimeout(self, timeout=0):
+        self.timeout = timeout
+        if self.sock and HAVE_SOCKET_TIMEOUT:
+            self.sock.settimeout(timeout)
+
+        if self._tls:
+            self._tls.settimeout(timeout)
 
 class HTTPSConnection(HTTPConnection):
 
     default_port = HTTPS_PORT
 
-    def __init__(self, host, port=None, timeout=0, certfile=None):
+    def __init__(self, host, port=None, timeout=None, certfile=None):
         HTTPConnection.__init__(self, host, port)
         self.cert_file = certfile
         self.timeout = timeout
+        self.tls_verify = True
 
 
     def _settimeout(self, sock, timeout):
-        if (timeout > 0) and HAVE_SOCKET_TIMEOUT:
+        if timeout and HAVE_SOCKET_TIMEOUT:
             sock.settimeout(timeout)
 
     def connect(self):
@@ -287,7 +317,13 @@ class HTTPSConnection(HTTPConnection):
             sock.setblocking(1)
             sock_fd = sock.fileno()
 
-        self.sock = TLSSocket(self.host, self.port, sock, sock_fd, self.timeout, self.cert_file)
+        certfile = self.cert_file
+        # print 'certfile: ', certfile
+        # print 'tls_verify: ', self.tls_verify 
+        if not self.tls_verify:
+            cert_file = None
+
+        self.sock = TLSSocket(self.host, self.port, sock, sock_fd, self.timeout, certfile)
 
     def shutdown(self):
         if self.sock:

@@ -163,7 +163,7 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
     }
 
     net.fd = fd;
-    mbedtls_ssl_conf_read_timeout(&conf, timeout);
+    mbedtls_ssl_conf_read_timeout(&conf, timeout*1000);
     mbedtls_ssl_set_bio(&ssl, &net, mbedtls_net_send, mbedtls_net_recv, mbedtls_net_recv_timeout);
     return true;
 }
@@ -236,6 +236,8 @@ struct TLS_object
     CTLS* tls;
     int error_code;
 };
+
+static PyObject *PyTLS_Error;
 
 #ifdef __SYMBIAN32__
 #define TLS_type ((PyTypeObject*)SPyGetGlobalString("TLSType"))
@@ -391,12 +393,24 @@ extern "C" PyObject* tls_init(PyObject* /*self*/, PyObject* args)
     int socket_fd;
     uint32_t timeout = 0;
     char* cert_file = NULL;
-    if (!PyArg_ParseTuple(args, "si|is",&server_name, &socket_fd, &timeout, &cert_file))
+    PyObject *timeout_o, *cert_file_o;
+
+    if (!PyArg_ParseTuple(args, "si|OO",&server_name, &socket_fd, &timeout_o, &cert_file_o))
     {
 	return NULL;
     }
-    TLS_object *obj;
 
+    if (PyInt_Check(timeout_o))
+    {
+	timeout = PyInt_AsLong(timeout_o);
+    }
+    
+    if (PyString_Check(cert_file_o)) 
+    {
+	cert_file = PyString_AsString(cert_file_o);
+    }
+
+    TLS_object *obj;
 #ifdef __SYMBIAN32__ 
     if (!(obj = PyObject_New(TLS_object, TLS_type)))
     {
@@ -417,7 +431,7 @@ extern "C" PyObject* tls_init(PyObject* /*self*/, PyObject* args)
 
     if(!obj->tls->Init(server_name, socket_fd, timeout, cert_file))
     {
-	return PyErr_Format(PyExc_SystemError, obj->tls->getError());
+	return PyErr_Format(PyTLS_Error, obj->tls->getError());
     }
     return (PyObject*)obj;
 }
@@ -429,12 +443,18 @@ extern "C" PyObject* tls_connect(PyObject*, PyObject* args)
 
     char* server_name;
     int server_port;
-    uint32_t timeout = 0;
-    if (!PyArg_ParseTuple(args, "si|i",&server_name, &server_port, &timeout))
+    uint32_t timeout = 0; // 0 = no timeout.
+    PyObject* timeout_o;
+    if (!PyArg_ParseTuple(args, "si|O",&server_name, &server_port, &timeout_o))
     {
 	return NULL;
     }
-    
+
+    if (PyInt_Check(timeout_o))
+    {
+	timeout = PyInt_AsLong(timeout_o);
+    }
+
     int socket_fd = -1;
     int error = 0;
     struct sockaddr_in addr;
@@ -561,6 +581,15 @@ extern "C"
 #endif 
 	PyObject* m = Py_InitModule("tls", (PyMethodDef*)tls_methods);
 	PyModule_AddIntConstant(m,"MBEDTLS_ERR_SSL_TIMEOUT", MBEDTLS_ERR_SSL_TIMEOUT);
+	//PyObject* d = PyModule_GetDict(m);
+	PyTLS_Error = PyErr_NewException("tls.TLSError", NULL, NULL);
+	if (PyTLS_Error == NULL)
+	    return;
+
+	Py_INCREF(PyTLS_Error);
+	PyModule_AddObject(m, "TLSError", PyTLS_Error);
+	//PyDict_SetItemString(d, "TLSError", PyTLS_Error);
+
     }
 
     // 2nd exported function

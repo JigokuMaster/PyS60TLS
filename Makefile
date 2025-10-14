@@ -1,6 +1,5 @@
 
 MBEDTLS_PATH = $(shell realpath ~/Dev/C/mbedtls-3.4.1)
-PYTHON_PATH= $(shell realpath ~/Dev/C/Python-2.2.2)
 LINUX_EXT_PATH = /tmp/tls.so
 
 CXXFLAGS += -fPIC -w -I$(PYTHON_PATH) \
@@ -9,7 +8,7 @@ CXXFLAGS += -fPIC -w -I$(PYTHON_PATH) \
 
 LD_FLAGS += -shared -L$(MBEDTLS_PATH)/library \
 	    -lmbedtls -lmbedx509 -lmbedcrypto \
-	    -L$(PYTHON_PATH) -lpython2.2
+	    -L$(PYTHON_PATH) $(PYTHON_LIB)
 
 CXXSRCS = $(shell ls *.cpp)
 CXX_OBJS = $(patsubst %.cpp,%.o,$(CXXSRCS))
@@ -28,6 +27,7 @@ linux_test:
 	$(PYTHON_PATH)/python tests.py
 clean: 
 	rm -rf *.o $(LINUX_EXT_PATH)
+	find . -type f -name '*.pyc' -exec rm {} +
 	abld reallyclean gcce urel
 
 

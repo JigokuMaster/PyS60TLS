@@ -2,18 +2,30 @@
 
 set -e
 
-MBEDTLS_PATH=`realpath ~/Dev/C/mbedtls-3.4.1`
-PYTHON_PATH=`realpath ~/Dev/C/Python-2.2.2`
+if [ $# != 1 ]; then
+  echo "Usage: no args."
+  exit 1
+fi
 
-g++ -w -shared -fPIC \
-    -I. \
-    -I$PYTHON_PATH \
-    -I$PYTHON_PATH/Include \
-    -I$MBEDTLS_PATH/include \
-    tlsmodule.cpp \
-    -L$MBEDTLS_PATH/library \
-    -lmbedtls -lmbedx509 -lmbedcrypto \
-    -L$PYTHON_PATH -lpython2.2 \
-    -o /tmp/tls.so
+py22()
+{
+    export PYTHON_PATH=`realpath ~/Dev/C/Python-2.2.2`
+    export PYTHON_LIB="-lpython2.2"
+}
 
-$PYTHON_PATH/python tests.py
+py25()
+{
+    export PYTHON_PATH=`realpath ~/Dev/C/Python-2.5`
+    export PYTHON_LIB="-lpython2.5"
+}
+
+BUILD_TYPE=`echo $1`
+
+if [ $BUILD_TYPE != "py22" -a $BUILD_TYPE != "py25" ]; then
+  echo "Usage: ./$0 [py22 or py25]"
+  exit 1
+fi
+
+$BUILD_TYPE
+make linux_ext
+
