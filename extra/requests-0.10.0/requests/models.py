@@ -33,7 +33,7 @@ from .utils import (
 
 # Import chardet if it is available.
 try:
-    import chardet
+    from .packages import chardet
 except ImportError:
     pass
 

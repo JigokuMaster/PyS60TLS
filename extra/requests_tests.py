@@ -9,9 +9,13 @@ import requests
 def test_get():
     url = 'https://api.ipify.org'
 
-    r = requests.get(url, verify=True)
+    r = requests.get(url)
 
     print "status: ", r.status_code
+
+    print "headers: ", r.headers
+
+    print "body: ", r.text
 
 def test_head():
     url = 'https://api.ipify.org'
@@ -29,6 +33,6 @@ def test_timeout():
 
     print "status: ", r.status_code
 
-#test_get()
+test_get()
 #test_head()
-test_timeout()
+#test_timeout()
