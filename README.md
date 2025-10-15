@@ -2,7 +2,7 @@ TLS extension for  PyS60.
 
 The extension is a simple wrapper around [MbedTLS library](https://github.com/JigokuMaster/Symbian-TLS-Patch) compiled with TLS 1.2 support.
 
-it supports certificate verification but currently only PEM format is supported for trusted certificates.
+it supports certificate verification, currently only PEM format is supported for trusted certificates.
  
 timeout is supported via PIPS 1.7 this runtime is required even when using the extension with PyS60 1.45
 
