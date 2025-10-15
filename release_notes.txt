@@ -1,0 +1,5 @@
+* Added timeout support.
+* Added server certificate verification.
+* Added requests library.
+* Code has been rewritten with a clean C++ style.
+
