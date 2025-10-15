@@ -146,13 +146,15 @@ class TLSWrapper:
             else:
                 raise tls.TLSError(msg)
 
+        str_ec = None
         if err_code in MBEDTLS_ERRORS_MAP:
-            msg += ' ' + MBEDTLS_ERRORS_MAP[err_code]
-
+            str_ec = MBEDTLS_ERRORS_MAP[err_code]
         elif abs(err_code) in MBEDTLS_ERRORS_MAP:
-            msg += ' ' + MBEDTLS_ERRORS_MAP[abs(err_code)]
+            str_ec = MBEDTLS_ERRORS_MAP[abs(err_code)]
         else:
-            msg += ' error ' + str(err_code)
+            str_ec = str(err_code)
+        if str_ec:
+            msg += ' [%s]' %str_ec  
         raise tls.TLSError(msg)
 
     def close(self):
@@ -163,23 +165,27 @@ class TLSWrapper:
         err = self.tls_obj.handshake()
         if err != 0:
             self.close()
-            self._throwException("tls.handshake()", err)
+            msg = 'tls.handshake() %s' %self.getError()
+            self._throwException(msg, err)
 
     def write(self, data):
         r = self.tls_obj.write(data)
         if r <= 0:
             self.close()
-            self._throwException("tls.write()", r)
+            msg = 'tls.write() %s' %self.getError()
+            self._throwException(msg, r)
         return r 
     
     def readAll(self):
         data = []
         while True:
             data.append(self.tls_obj.read())
-            r = self.tls_obj.getError()
+            r = self.tls_obj.getErrorCode()
             if r < 0:
                 self.close()
-                self._throwException("tls.read()", r)
+                msg = 'tls.read() %s' %self.getError()
+                self._throwException(msg, r)
+
             if r == 0: #EOF
                 break
         return ''.join(data)
@@ -190,12 +196,16 @@ class TLSWrapper:
             return self.readAll()
         else:
             data = self.tls_obj.read(rlen)
-            r = self.tls_obj.getError()
+            r = self.tls_obj.getErrorCode()
             if r < 0:
                 self.close()
-                self._throwException("tls.read()", r)
+                msg = 'tls.read() %s' %self.getError()
+                self._throwException(msg, r)
             else:
                 return data
+
+    def getErrorCode(self):
+        return self.tls_obj.getErrorCode()
 
     def getError(self):
         return self.tls_obj.getError()

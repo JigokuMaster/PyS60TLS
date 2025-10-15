@@ -19,13 +19,13 @@ py25()
     export PYTHON_LIB="-lpython2.5"
 }
 
-BUILD_TYPE=`echo $1`
+BUILD_TARGET=`echo $1`
 
-if [ $BUILD_TYPE != "py22" -a $BUILD_TYPE != "py25" ]; then
+if [ $BUILD_TARGET != "py22" -a $BUILD_TARGET != "py25" ]; then
   echo "Usage: ./$0 [py22 or py25]"
   exit 1
 fi
 
-$BUILD_TYPE
-make linux_ext
+$BUILD_TARGET
+make -B linux_ext
 

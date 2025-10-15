@@ -6,10 +6,10 @@ sys.path.append(os.path.realpath('..'))
 
 import requests
 
+SERVICE = 'https://echo.free.beeceptor.com'
 def test_get():
-    url = 'https://api.ipify.org'
 
-    r = requests.get(url)
+    r = requests.get(SERVICE, timeout=5)
 
     print "status: ", r.status_code
 
@@ -17,14 +17,46 @@ def test_get():
 
     print "body: ", r.text
 
-def test_head():
-    url = 'https://api.ipify.org'
+def test_post():
 
-    r = requests.head(url, verify=True)
+    r = requests.post(SERVICE, data={"id": 0x1}, timeout=5)
 
     print "status: ", r.status_code
 
     print "headers: ", r.headers
+
+    print "body: ", r.text
+
+def test_postfile():
+    f = open('/tmp/test.txt', 'r')
+    r = requests.post(SERVICE, files={'file': f}, timeout=5)
+
+    print "status: ", r.status_code
+
+    print "headers: ", r.headers
+
+    print "body: ", r.text
+
+
+def test_head():
+    r = requests.head(SERVICE, timeout=5)
+
+    print "status: ", r.status_code
+
+    print "headers: ", r.headers
+
+def test_auth():
+    url = 'https://reqbin.com/echo'
+
+    r = requests.get(url,auth=('utest25', '12345'), timeout=5)
+
+    print "status: ", r.status_code
+
+    print "headers: ", r.headers
+
+    print "body: ", r.content
+
+
 
 def test_timeout():
     url = 'https://www.google.com:81'
@@ -33,6 +65,7 @@ def test_timeout():
 
     print "status: ", r.status_code
 
-test_get()
+test_auth()
+#test_postfile()
 #test_head()
 #test_timeout()

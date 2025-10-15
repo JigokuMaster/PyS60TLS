@@ -19,9 +19,9 @@ STATICLIBRARY mbedtls.lib
 source tlsmodule.cpp
 
 // high caps
-CAPABILITY ReadDeviceData WriteDeviceData SwEvent NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment
+//CAPABILITY ReadDeviceData WriteDeviceData SwEvent NetworkServices LocalServices ReadUserData WriteUserData Location UserEnvironment
 
 // self-signed caps
-//CAPABILITY NetworkServices LocalServices ReadUserData WriteUserData UserEnvironment
+CAPABILITY NetworkServices LocalServices ReadUserData WriteUserData UserEnvironment
 
 DEFFILE ./eabi/kf_tls.def

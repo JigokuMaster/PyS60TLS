@@ -30,4 +30,22 @@ clean:
 	find . -type f -name '*.pyc' -exec rm {} +
 	abld reallyclean gcce urel
 
+REL_DIST = /tmp/PyS60TLS
+BIN_DIST = $(REL_DIST)/Sys/Bin
+BIN_SRC = $(EPOCROOT)/epoc32/release/gcce/urel
+RES_DIST = $(REL_DIST)/Resource
+DIST_FILE = PyS60TLS.zip
+
+pys60_rel: 
+	find . -type f -name '*.pyc' -exec rm {} +
+	rm -rf $(REL_DIST)
+	rm -f $(DIST_FILE) 
+	mkdir -p $(BIN_DIST)
+	mkdir -p $(RES_DIST)/Python25
+	cp -v $(BIN_SRC)/kf_tls.pyd $(BIN_DIST)
+	cp -v $(BIN_SRC)/tls.pyd $(BIN_DIST)
+	cp -v httpslib.py $(RES_DIST)
+	cp -v httpslib.py $(RES_DIST)/Python25
+	cp -v -R extra/requests-0.10.0/requests $(RES_DIST)/Python25
+	7z a -tzip $(DIST_FILE) $(REL_DIST)
 

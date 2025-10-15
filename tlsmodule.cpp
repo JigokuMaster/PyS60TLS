@@ -109,7 +109,7 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
 
     if(error_code != 0)
     {
-	sprintf(error_buf, "mbedtls_ctr_drbg_seed() error: %d", error_code);
+	//sprintf(error_buf, "mbedtls_ctr_drbg_seed() error: %d", error_code);
 	return false;
     }
     
@@ -118,7 +118,7 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
 	error_code = mbedtls_x509_crt_parse_file(&cacert, cert_file);
 	if(error_code != 0)
 	{
-	    sprintf(error_buf, "mbedtls_x509_crt_parse_file() error: %d", error_code);
+	    //sprintf(error_buf, "mbedtls_x509_crt_parse_file() error: %d", error_code);
 	    return false;
 	}
 	ssl_verify = true;
@@ -128,7 +128,7 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
 
     if(error_code != 0)
     {
-	sprintf(error_buf, "mbedtls_ssl_config_defaults() error: %d", error_code);
+	//sprintf(error_buf, "mbedtls_ssl_config_defaults() error: %d", error_code);
 	return false;
     }
 
@@ -151,14 +151,14 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
     error_code = mbedtls_ssl_setup(&ssl, &conf);
     if(error_code != 0)
     {
-	sprintf(error_buf, "mbedtls_ssl_setup() error: %d", error_code);
+	//sprintf(error_buf, "mbedtls_ssl_setup() error: %d", error_code);
 	return false;
     }
 
     error_code = mbedtls_ssl_set_hostname(&ssl, hostname);
     if(error_code != 0)
     {
-	sprintf(error_buf, "mbedtls_ssl_set_hostname() error: %d", error_code);
+	//sprintf(error_buf, "mbedtls_ssl_set_hostname() error: %d", error_code);
 	return false;
     }
 
@@ -170,6 +170,7 @@ bool CTLS::Init(char* hostname, int fd, uint32_t timeout, char* cert_file)
 
 char* CTLS::getError()
 {
+    mbedtls_strerror(error_code, error_buf, sizeof(error_buf));
     return (char*)error_buf;
 }
 
@@ -180,7 +181,7 @@ int CTLS::DoHandshake()
     {
         if((ret != MBEDTLS_ERR_SSL_WANT_READ) && (ret != MBEDTLS_ERR_SSL_WANT_WRITE) )
 	{
-
+	    error_code = ret;
 	    break;
         }
     }
@@ -323,9 +324,14 @@ extern "C" PyObject* tls_close(TLS_object* obj, PyObject* args)
     return Py_BuildValue("i", ret);
 }
 
-extern "C" PyObject* tls_geterror(TLS_object* obj, PyObject* args)
+extern "C" PyObject* tls_geterror_code(TLS_object* obj, PyObject* args)
 {
     return Py_BuildValue("i",obj->error_code);
+}
+
+extern "C" PyObject* tls_geterror(TLS_object* obj, PyObject* args)
+{
+    return Py_BuildValue("s", obj->tls->getError());
 }
 
 const static PyMethodDef tls_object_methods[] = 
@@ -334,6 +340,7 @@ const static PyMethodDef tls_object_methods[] =
     {"read", (PyCFunction)tls_read, METH_VARARGS},
     {"write", (PyCFunction)tls_write, METH_VARARGS},
     {"close", (PyCFunction)tls_close, METH_NOARGS},
+    {"getErrorCode", (PyCFunction)tls_geterror_code, METH_NOARGS},
     {"getError", (PyCFunction)tls_geterror, METH_NOARGS},
     {NULL, NULL}           // sentinel
 

@@ -31,8 +31,7 @@ def test_timeout():
 
 def test_ssl_verification():
     host = 'localhost'
-    #host = 'api.ipify.org'
-    conn = httpslib.HTTPSConnection(host, port=4443, timeout=10, certfile='cacert.pem')
+    conn = httpslib.HTTPSConnection(host, port=4443, timeout=10, certfile='../cacert.pem')
     headers = {'Connection': 'close'}
     conn.request("GET", "/", headers=headers)
     resp = conn.getresponse()
